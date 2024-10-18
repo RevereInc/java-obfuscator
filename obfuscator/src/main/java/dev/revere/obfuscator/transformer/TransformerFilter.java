@@ -11,8 +11,6 @@ import java.util.List;
  * @date 10/18/2024
  */
 public class TransformerFilter {
-    private static final Logger LOGGER = Logger.getLogger(TransformerFilter.class.getName());
-
     public static boolean shouldTransform(String className, String transformerName, Configuration config) {
         boolean isGloballyExcluded = matchesAny(className, config.getGlobalExclusions());
         boolean isGloballyIncluded = matchesAny(className, config.getGlobalInclusions());

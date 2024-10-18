@@ -6,6 +6,7 @@ import dev.revere.obfuscator.logging.Logger;
 import dev.revere.obfuscator.transformer.TransformerManager;
 import dev.revere.obfuscator.transformer.transformers.AsciiArtTransformer;
 import dev.revere.obfuscator.transformer.transformers.FieldTransformer;
+import dev.revere.obfuscator.transformer.transformers.MethodTransformer;
 import dev.revere.obfuscator.transformer.transformers.StringTransformer;
 
 import java.io.IOException;
@@ -25,6 +26,7 @@ public class ObfuscationEngine {
         JarProcessor jarProcessor = new JarProcessor(transformerManager, config);
         this.transformerManager = new TransformerManager(jarProcessor);
         this.transformerManager.addTransformer(new AsciiArtTransformer());
+        this.transformerManager.addTransformer(new MethodTransformer());
         this.transformerManager.addTransformer(new StringTransformer());
         this.transformerManager.addTransformer(new FieldTransformer());
 

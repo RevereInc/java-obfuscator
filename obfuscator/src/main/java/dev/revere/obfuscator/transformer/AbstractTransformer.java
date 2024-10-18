@@ -2,6 +2,7 @@ package dev.revere.obfuscator.transformer;
 
 import dev.revere.obfuscator.config.Configuration;
 import dev.revere.obfuscator.exception.ObfuscationException;
+import dev.revere.obfuscator.logging.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -43,8 +44,6 @@ public abstract class AbstractTransformer implements Transformer {
         return transformedClasses;
     }
 
-    public void collectInformation(Map<String, byte[]> classes, Configuration config, TransformationContext context) throws ObfuscationException {
-    }
-
+    public void collectInformation(Map<String, byte[]> classes, Configuration config, TransformationContext context) throws ObfuscationException {}
     protected abstract byte[] doTransform(byte[] classBytes, String className, Configuration config, TransformationContext context, Map<String, byte[]> allClasses, Map<String, byte[]> newClasses) throws ObfuscationException;
 }

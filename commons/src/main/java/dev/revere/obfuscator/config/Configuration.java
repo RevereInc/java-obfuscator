@@ -1,7 +1,6 @@
 package dev.revere.obfuscator.config;
 
 import dev.revere.obfuscator.logging.Logger;
-import lombok.Setter;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -16,7 +15,6 @@ import java.util.*;
  * @project revere-java-obfuscator
  * @date 10/18/2024
  */
-@Setter
 public class Configuration {
     private static final Logger LOGGER = Logger.getLogger(Configuration.class.getName());
 

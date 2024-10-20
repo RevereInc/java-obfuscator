@@ -41,8 +41,8 @@ public class Main implements Callable<Integer> {
             LOGGER.process("Starting obfuscation process...");
             Configuration config = Configuration.loadFromFile(Paths.get(configFile.getAbsolutePath()).toString());
 
-            ObfuscationEngine obfuscationEngine = new ObfuscationEngine();
-            obfuscationEngine.obfuscate(inputFile.toPath(), outputFile.toPath(), config);
+            ObfuscationEngine obfuscationEngine = new ObfuscationEngine(config);
+            obfuscationEngine.obfuscate(inputFile.toPath(), outputFile.toPath());
 
             LOGGER.success("Obfuscation completed successfully!");
             return 0;

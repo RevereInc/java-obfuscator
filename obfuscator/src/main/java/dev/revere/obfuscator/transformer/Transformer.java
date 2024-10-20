@@ -12,5 +12,4 @@ import java.util.Map;
  */
 public interface Transformer {
     String getName();
-    Map<String, byte[]> transformAllClasses(Map<String, byte[]> classes, Configuration config, TransformationContext context) throws ObfuscationException;
 }

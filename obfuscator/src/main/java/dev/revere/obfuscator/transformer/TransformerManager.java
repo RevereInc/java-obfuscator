@@ -1,15 +1,15 @@
 package dev.revere.obfuscator.transformer;
 
-import dev.revere.obfuscator.JarProcessor;
 import dev.revere.obfuscator.config.Configuration;
-import dev.revere.obfuscator.exception.ObfuscationException;
 import dev.revere.obfuscator.logging.Logger;
+import dev.revere.obfuscator.transformer.transformers.AsciiArtTransformer;
+import dev.revere.obfuscator.transformer.transformers.FieldTransformer;
+import dev.revere.obfuscator.transformer.transformers.MethodTransformer;
+import dev.revere.obfuscator.transformer.transformers.StringTransformer;
 import lombok.Getter;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * @author Remi
@@ -21,11 +21,25 @@ public class TransformerManager {
     private static final Logger LOGGER = Logger.getLogger(TransformerManager.class.getName());
 
     private final List<AbstractTransformer> transformers;
-    private final TransformationContext context;
+    private final Configuration config;
 
-    public TransformerManager(JarProcessor jarProcessor) {
+    public TransformerManager(Configuration config) {
         this.transformers = new ArrayList<>();
-        this.context = new TransformationContext(jarProcessor);
+        this.config = config;
+        initializeTransformers();
+    }
+
+    private void initializeTransformers() {
+        addTransformer(new AsciiArtTransformer());
+        addTransformer(new MethodTransformer());
+        addTransformer(new StringTransformer());
+        addTransformer(new FieldTransformer());
+
+        for (String transformer : config.getEnabledTransformers()) {
+            if (getTransformer(transformer) == null) {
+                LOGGER.warning("Transformer not found: " + transformer);
+            }
+        }
     }
 
     public void addTransformer(AbstractTransformer transformer) {
@@ -33,38 +47,9 @@ public class TransformerManager {
     }
 
     public AbstractTransformer getTransformer(String name) {
-        for (AbstractTransformer transformer : transformers) {
-            if (transformer.getName().equals(name)) {
-                return transformer;
-            }
-        }
-
-        return null;
-    }
-
-    public void collectInformation(Map<String, byte[]> classes, Configuration config) throws ObfuscationException {
-        for (AbstractTransformer transformer : transformers) {
-            if (config.isTransformerEnabled(transformer.getName())) {
-                transformer.collectInformation(classes, config, context);
-            }
-        }
-    }
-
-    public Map<String, byte[]> applyTransformations(Map<String, byte[]> classes, Configuration config) throws ObfuscationException {
-        Map<String, byte[]> transformedClasses = new HashMap<>(classes);
-
-        for (Transformer transformer : transformers) {
-            if (config.isTransformerEnabled(transformer.getName())) {
-                try {
-                    LOGGER.debug("Applying transformer " + transformer.getName());
-                    transformedClasses = transformer.transformAllClasses(transformedClasses, config, context);
-                } catch (ObfuscationException e) {
-                    LOGGER.severe("Failed to apply transformer " + transformer.getName());
-                    throw e;
-                }
-            }
-        }
-
-        return transformedClasses;
+        return transformers.stream()
+                .filter(transformer -> transformer.getName().equals(name))
+                .findFirst()
+                .orElse(null);
     }
 }

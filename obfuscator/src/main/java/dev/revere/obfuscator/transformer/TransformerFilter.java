@@ -11,21 +11,49 @@ import java.util.List;
  * @date 10/18/2024
  */
 public class TransformerFilter {
+    private static final Logger LOGGER = Logger.getLogger(TransformerFilter.class.getName());
+
     public static boolean shouldTransform(String className, String transformerName, Configuration config) {
         boolean isGloballyExcluded = matchesAny(className, config.getGlobalExclusions());
         boolean isGloballyIncluded = matchesAny(className, config.getGlobalInclusions());
+        boolean isTransformerExcluded = matchesAny(className, config.getExclusions(transformerName));
+        boolean isTransformerIncluded = matchesAny(className, config.getInclusions(transformerName));
 
         if (isGloballyExcluded) {
-            return matchesAny(className, config.getInclusions(transformerName));
+            if (isTransformerIncluded) {
+                LOGGER.debug("Including class " + className + " because it is included by transformer " + transformerName);
+                return true;
+            }
+            return false;
         }
 
         if (isGloballyIncluded) {
-            return !matchesAny(className, config.getExclusions(transformerName));
+            if (isTransformerExcluded) {
+                LOGGER.debug("Skipping class " + className + " because it is excluded by transformer " + transformerName);
+                return false;
+            }
+
+            return true;
         }
 
-        return matchesAny(className, config.getInclusions(transformerName));
-    }
+        if (isTransformerIncluded) {
+            LOGGER.debug("Including class " + className + " because it is included by transformer " + transformerName);
 
+            if (isTransformerExcluded) {
+                LOGGER.debug("Skipping class " + className + " because it is excluded by transformer " + transformerName);
+                return false;
+            }
+            return true;
+        }
+
+        // If the class is neither globally included nor excluded, check transformer-specific exclusions
+        if (isTransformerExcluded) {
+            LOGGER.debug("Skipping class " + className + " because it is excluded by transformer " + transformerName);
+            return false;
+        }
+
+        return true;
+    }
     private static boolean matchesAny(String className, List<String> patterns) {
         for (String pattern : patterns) {
             if (matchesPattern(className, pattern)) {

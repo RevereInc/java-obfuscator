@@ -3,13 +3,12 @@ package dev.revere.obfuscator.transformer.transformers;
 import dev.revere.obfuscator.config.Configuration;
 import dev.revere.obfuscator.exception.ObfuscationException;
 import dev.revere.obfuscator.transformer.AbstractTransformer;
-import dev.revere.obfuscator.transformer.TransformationContext;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassWriter;
+import dev.revere.obfuscator.transformer.context.TransformerContext;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
@@ -46,21 +45,30 @@ public class AsciiArtTransformer extends AbstractTransformer {
     };
 
     @Override
-    protected byte[] doTransform(byte[] classBytes, String className, Configuration config, TransformationContext context, Map<String, byte[]> allClasses, Map<String, byte[]> newClasses) throws ObfuscationException {
+    public Map<String, ClassNode> transform(Map<String, ClassNode> classNodes, Configuration config, TransformerContext context) throws ObfuscationException {
         try {
-            ClassReader cr = new ClassReader(classBytes);
-            ClassNode classNode = new ClassNode();
-            cr.accept(classNode, 0);
+            Map<String, ClassNode> transformedNodes = new HashMap<>(classNodes);
 
-            for (String asciiArt : ASCII_ART) {
-                FieldNode fieldNode = new FieldNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
-                        getRandomString(3), "Ljava/lang/String;", null, asciiArt);
-                classNode.fields.add(fieldNode);
+            for (Map.Entry<String, ClassNode> entry : transformedNodes.entrySet()) {
+                String className = entry.getKey().replace('/', '.').replace(".class", "");
+                ClassNode classNode = entry.getValue();
+
+                if (shouldTransform(className, config)) {
+                    for (String asciiArt : ASCII_ART) {
+                        FieldNode fieldNode = new FieldNode(
+                                Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+                                getRandomString(3),
+                                "Ljava/lang/String;",
+                                null,
+                                asciiArt
+                        );
+                        classNode.fields.add(fieldNode);
+                        context.addProtectedField(className, fieldNode.name);
+                    }
+                }
             }
 
-            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-            classNode.accept(cw);
-            return cw.toByteArray();
+            return transformedNodes;
         } catch (Exception e) {
             throw new ObfuscationException("Error in AsciiArtTransformer: " + e.getMessage());
         }

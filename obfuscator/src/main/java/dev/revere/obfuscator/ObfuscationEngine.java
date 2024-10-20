@@ -4,10 +4,6 @@ import dev.revere.obfuscator.config.Configuration;
 import dev.revere.obfuscator.exception.ObfuscationException;
 import dev.revere.obfuscator.logging.Logger;
 import dev.revere.obfuscator.transformer.TransformerManager;
-import dev.revere.obfuscator.transformer.transformers.AsciiArtTransformer;
-import dev.revere.obfuscator.transformer.transformers.FieldTransformer;
-import dev.revere.obfuscator.transformer.transformers.MethodTransformer;
-import dev.revere.obfuscator.transformer.transformers.StringTransformer;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -20,23 +16,14 @@ import java.nio.file.Path;
 public class ObfuscationEngine {
     private static final Logger LOGGER = Logger.getLogger(ObfuscationEngine.class.getName());
 
-    private TransformerManager transformerManager;
+    private final JarProcessor jarProcessor;
 
-    public void obfuscate(Path inputPath, Path outputPath, Configuration config) throws ObfuscationException, IOException {
-        JarProcessor jarProcessor = new JarProcessor(transformerManager, config);
-        this.transformerManager = new TransformerManager(jarProcessor);
-        this.transformerManager.addTransformer(new AsciiArtTransformer());
-        this.transformerManager.addTransformer(new MethodTransformer());
-        this.transformerManager.addTransformer(new StringTransformer());
-        this.transformerManager.addTransformer(new FieldTransformer());
+    public ObfuscationEngine(Configuration config) {
+        TransformerManager transformerManager = new TransformerManager(config);
+        this.jarProcessor = new JarProcessor(config, transformerManager);
+    }
 
-        for (String transformer : config.getEnabledTransformers()) {
-            if (transformerManager.getTransformer(transformer) == null) {
-                LOGGER.warning("Transformer not found: " + transformer);
-            }
-        }
-
-        jarProcessor.setTransformerManager(transformerManager);
+    public void obfuscate(Path inputPath, Path outputPath) throws ObfuscationException, IOException {
         jarProcessor.process(inputPath, outputPath);
     }
 }

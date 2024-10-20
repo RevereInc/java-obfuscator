@@ -1,0 +1,15 @@
+package dev.revere.obfuscator.jar;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * @author Remi
+ * @project revere-java-obfuscator
+ * @date 10/19/2024
+ */
+public interface JarWriter {
+    void writeJar(Path outputPath, Map<String, byte[]> classes, Set<String> resourceEntries, Path inputPath) throws IOException;
+}

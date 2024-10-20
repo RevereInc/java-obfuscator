@@ -21,6 +21,7 @@ public class Configuration {
     private Map<String, Boolean> enabledTransformers;
     private Map<String, List<String>> inclusions;
     private Map<String, List<String>> exclusions;
+    private Map<String, Map<String, Object>> customSettings;
 
     private List<String> globalInclusions;
     private List<String> globalExclusions;
@@ -33,6 +34,7 @@ public class Configuration {
         this.libraryPaths = new ArrayList<>();
         this.inclusions = new HashMap<>();
         this.exclusions = new HashMap<>();
+        this.customSettings = new HashMap<>();
     }
 
     public static Configuration loadFromFile(String filePath) throws IOException {
@@ -44,26 +46,44 @@ public class Configuration {
         }
 
         Configuration config = new Configuration();
-        String[] transformers = props.getProperty("transformers.enabled", "").split(",");
-
-        for (String transformer : transformers) {
-            config.setTransformerEnabled(transformer.trim(), true);
-        }
 
         for (String key : props.stringPropertyNames()) {
-            if (key.startsWith("inclusions.")) {
-                String transformer = key.substring("inclusions.".length());
-                String[] patterns = props.getProperty(key).split(",");
+            if (key.startsWith("transformers.")) {
+                String[] parts = key.split("\\.");
 
-                for (String pattern : patterns) {
-                    config.addInclusion(transformer, pattern.trim());
+                if (parts.length < 3) {
+                    LOGGER.warning("Invalid transformer configuration key: " + key);
+                    continue;
                 }
-            } else if (key.startsWith("exclusions.")) {
-                String transformer = key.substring("exclusions.".length());
-                String[] patterns = props.getProperty(key).split(",");
 
-                for (String pattern : patterns) {
-                    config.addExclusion(transformer, pattern.trim());
+                String transformer = parts[1];
+                String setting = parts[2];
+                String customSetting = parts.length > 3 ? parts[3] : null;
+
+                switch (setting) {
+                    case "enabled":
+                        config.setTransformerEnabled(transformer, Boolean.parseBoolean(props.getProperty(key)));
+                        break;
+                    case "inclusions":
+                        String[] inclusions = props.getProperty(key, "").split(",");
+                        for (String pattern : inclusions) {
+                            config.addInclusion(transformer, pattern.trim());
+                        }
+                        break;
+                    case "exclusions":
+                        String[] exclusions = props.getProperty(key, "").split(",");
+                        for (String pattern : exclusions) {
+                            config.addExclusion(transformer, pattern.trim());
+                        }
+                        break;
+                    case "custom":
+                        if (customSetting != null) {
+                            config.addCustomSetting(transformer, customSetting, props.getProperty(key));
+                        }
+                        break;
+                    default:
+                        LOGGER.warning("Invalid transformer setting: " + setting);
+                        break;
                 }
             }
         }
@@ -153,5 +173,17 @@ public class Configuration {
 
     public List<String> getLibraryPaths() {
         return Collections.unmodifiableList(libraryPaths);
+    }
+
+    public void addCustomSetting(String transformerName, String settingName, String value) {
+        customSettings.computeIfAbsent(transformerName, k -> new HashMap<>()).put(settingName, value);
+    }
+
+    public Object getCustomSetting(String transformerName, String settingName) {
+        return customSettings.getOrDefault(transformerName, Collections.emptyMap()).get(settingName);
+    }
+
+    public Map<String, Object> getCustomSettings(String transformerName) {
+        return Collections.unmodifiableMap(customSettings.getOrDefault(transformerName, Collections.emptyMap()));
     }
 }

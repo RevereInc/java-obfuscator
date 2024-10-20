@@ -3,12 +3,13 @@ package dev.revere.obfuscator.transformer.transformers;
 import dev.revere.obfuscator.config.Configuration;
 import dev.revere.obfuscator.exception.ObfuscationException;
 import dev.revere.obfuscator.transformer.AbstractTransformer;
-import dev.revere.obfuscator.transformer.TransformationContext;
+import dev.revere.obfuscator.transformer.context.TransformerContext;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
@@ -33,44 +34,38 @@ public class StringTransformer extends AbstractTransformer {
         }
     }
 
+
     @Override
-    protected byte[] doTransform(byte[] classBytes, String className, Configuration config, TransformationContext context, Map<String, byte[]> allClasses, Map<String, byte[]> newClasses) throws ObfuscationException {
+    public Map<String, ClassNode> transform(Map<String, ClassNode> classNodes, Configuration config, TransformerContext context) throws ObfuscationException {
+        Map<String, ClassNode> transformedNodes = new HashMap<>(classNodes);
         if (!decryptorAdded) {
-            addStringDecryptorClass(allClasses);
+            addStringDecryptorClass(transformedNodes);
             decryptorAdded = true;
         }
 
-        ClassReader cr = new ClassReader(classBytes);
-        ClassNode classNode = new ClassNode();
-        cr.accept(classNode, 0);
+        for (Map.Entry<String, ClassNode> entry : transformedNodes.entrySet()) {
+            String className = entry.getKey().replace('/', '.').replace(".class", "");
+            ClassNode classNode = entry.getValue();
 
-        boolean modified = false;
-
-        for (MethodNode methodNode : classNode.methods) {
-            modified |= transformMethod(methodNode, classNode);
-        }
-
-        if (modified) {
-            ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS) {
-                @Override
-                protected ClassLoader getClassLoader() {
-                    return context.getJarProcessor().getClassLoader();
+            if (shouldTransform(className, config)) {
+                for (MethodNode methodNode : classNode.methods) {
+                    transformMethod(methodNode);
                 }
-            };
-
-            classNode.accept(cw);
-            return cw.toByteArray();
+            }
         }
 
-        return null;
+        return transformedNodes;
     }
 
-    private void addStringDecryptorClass(Map<String, byte[]> allClasses) {
-        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);
-        cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, DECRYPT_HELPER_CLASS, null, "java/lang/Object", null);
+    private void addStringDecryptorClass(Map<String, ClassNode> classNodes) {
+        ClassNode decryptorNode = new ClassNode();
+        decryptorNode.version = Opcodes.V1_8;
+        decryptorNode.access = Opcodes.ACC_PUBLIC;
+        decryptorNode.name = DECRYPT_HELPER_CLASS;
+        decryptorNode.superName = "java/lang/Object";
 
         // Add constructor
-        MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+        MethodVisitor mv = decryptorNode.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
         mv.visitCode();
         mv.visitVarInsn(Opcodes.ALOAD, 0);
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
@@ -79,11 +74,11 @@ public class StringTransformer extends AbstractTransformer {
         mv.visitEnd();
 
         // Add MAGIC field
-        FieldVisitor fv = cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, "MAGIC", "[J", null, null);
+        FieldVisitor fv = decryptorNode.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL, "MAGIC", "[J", null, null);
         fv.visitEnd();
 
         // Add static initializer for MAGIC
-        mv = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+        mv = decryptorNode.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
         mv.visitCode();
         Label l0 = new Label();
         Label l1 = new Label();
@@ -120,7 +115,7 @@ public class StringTransformer extends AbstractTransformer {
         mv.visitEnd();
 
         // Add decryption method
-        MethodVisitor decryptor = cw.visitMethod(
+        MethodVisitor decryptor = decryptorNode.visitMethod(
                 Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC,
                 DECRYPT_METHOD_NAME,
                 DECRYPT_METHOD_DESC,
@@ -339,13 +334,12 @@ public class StringTransformer extends AbstractTransformer {
 
         decryptor.visitMaxs(6, 11);
         decryptor.visitEnd();
-        cw.visitEnd();
+        decryptorNode.visitEnd();
 
-        allClasses.put(DECRYPT_HELPER_CLASS + ".class", cw.toByteArray());
+        classNodes.put(DECRYPT_HELPER_CLASS + ".class", decryptorNode);
     }
 
-    private boolean transformMethod(MethodNode methodNode, ClassNode classNode) {
-        boolean modified = false;
+    private void transformMethod(MethodNode methodNode) {
         for (AbstractInsnNode insn : methodNode.instructions.toArray()) {
             if (insn instanceof LdcInsnNode) {
                 LdcInsnNode ldcInsn = (LdcInsnNode) insn;
@@ -362,12 +356,10 @@ public class StringTransformer extends AbstractTransformer {
 
                         methodNode.instructions.insert(ldcInsn, newInstructions);
                         methodNode.instructions.remove(ldcInsn);
-                        modified = true;
                     }
                 }
             }
         }
-        return modified;
     }
 
     private String encrypt(String input, int key) {

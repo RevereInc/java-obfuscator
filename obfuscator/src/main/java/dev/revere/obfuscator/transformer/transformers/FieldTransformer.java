@@ -2,16 +2,15 @@ package dev.revere.obfuscator.transformer.transformers;
 
 import dev.revere.obfuscator.config.Configuration;
 import dev.revere.obfuscator.exception.ObfuscationException;
+import dev.revere.obfuscator.logging.Logger;
 import dev.revere.obfuscator.transformer.AbstractTransformer;
-import dev.revere.obfuscator.transformer.TransformationContext;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassWriter;
+import dev.revere.obfuscator.transformer.context.TransformerContext;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 /**
  * @author Remi
@@ -19,6 +18,7 @@ import java.util.Random;
  * @date 10/18/2024
  */
 public class FieldTransformer extends AbstractTransformer {
+    private static final Logger LOGGER = Logger.getLogger(FieldTransformer.class.getName());
     private final Random random = new Random();
 
     public FieldTransformer() {
@@ -26,60 +26,60 @@ public class FieldTransformer extends AbstractTransformer {
     }
 
     @Override
-    public void collectInformation(Map<String, byte[]> classes, Configuration config, TransformationContext context) throws ObfuscationException {
-        for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
-            String className = entry.getKey().replace('/', '.').replace(".class", "");
-            ClassReader cr = new ClassReader(entry.getValue());
-            ClassNode classNode = new ClassNode();
-            cr.accept(classNode, 0);
-
-            for (FieldNode fieldNode : classNode.fields) {
-                String newName = generateSecureFieldName(fieldNode.name);
-                context.addFieldMapping(className, fieldNode.name, newName);
-            }
-        }
-    }
-
-    @Override
-    protected byte[] doTransform(byte[] classBytes, String className, Configuration config, TransformationContext context, Map<String, byte[]> allClasses, Map<String, byte[]> newClasses) throws ObfuscationException {
+    public Map<String, ClassNode> transform(Map<String, ClassNode> classNodes, Configuration config, TransformerContext context) throws ObfuscationException {
         try {
-            ClassReader cr = new ClassReader(classBytes);
-            ClassNode classNode = new ClassNode();
-            cr.accept(classNode, 0);
+            Map<String, ClassNode> transformedNodes = new HashMap<>(classNodes);
+            Map<String, Map<String, String>> fieldMappings = new HashMap<>();
 
-            transformFields(classNode, context, className);
+            // First pass: Rename fields and collect mappings
+            for (Map.Entry<String, ClassNode> entry : transformedNodes.entrySet()) {
+                String className = entry.getKey().replace('/', '.').replace(".class", "");
+                ClassNode classNode = entry.getValue();
 
-            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-            classNode.accept(cw);
-            return cw.toByteArray();
-        } catch (Exception e) {
-            throw new ObfuscationException("Failed to transform class " + className);
-        }
-    }
+                if (shouldTransform(className, config)) {
+                    Map<String, String> classMappings = new HashMap<>();
+                    for (FieldNode fieldNode : classNode.fields) {
+                        if (context.isFieldProtected(className, fieldNode.name)) {
+                            continue;
+                        }
 
-    private void transformFields(ClassNode classNode, TransformationContext context, String className) {
-        for (FieldNode fieldNode : classNode.fields) {
-            String newName = context.getNewFieldName(className, fieldNode.name);
-            if (newName != null) {
-                fieldNode.name = newName;
-            }
-        }
+                        if ((fieldNode.access & Opcodes.ACC_SYNTHETIC) != 0 || (fieldNode.access & Opcodes.ACC_ENUM) != 0) {
+                            continue;
+                        }
 
-        for (MethodNode methodNode : classNode.methods) {
-            transformFieldAccesses(methodNode, context, className);
-        }
-    }
-
-    private void transformFieldAccesses(MethodNode methodNode, TransformationContext context, String className) {
-        for (AbstractInsnNode insnNode : methodNode.instructions.toArray()) {
-            if (insnNode instanceof FieldInsnNode) {
-                FieldInsnNode fieldInsnNode = (FieldInsnNode) insnNode;
-                String ownerClassName = fieldInsnNode.owner.replace('/', '.');
-                String newName = context.getNewFieldName(ownerClassName, fieldInsnNode.name);
-                if (newName != null) {
-                    fieldInsnNode.name = newName;
+                        String newName = generateSecureFieldName(fieldNode.name);
+                        classMappings.put(fieldNode.name + fieldNode.desc, newName);
+                        fieldNode.name = newName;
+                    }
+                    if (!classMappings.isEmpty()) {
+                        fieldMappings.put(className, classMappings);
+                    }
                 }
             }
+
+            // Second pass: Update field references in all classes
+            for (ClassNode classNode : transformedNodes.values()) {
+                for (MethodNode methodNode : classNode.methods) {
+                    for (AbstractInsnNode insnNode : methodNode.instructions) {
+                        if (insnNode instanceof FieldInsnNode) {
+                            FieldInsnNode fieldInsnNode = (FieldInsnNode) insnNode;
+                            String ownerClassName = fieldInsnNode.owner.replace('/', '.');
+                            Map<String, String> classMappings = fieldMappings.get(ownerClassName);
+                            if (classMappings != null) {
+                                String key = fieldInsnNode.name + fieldInsnNode.desc;
+                                String newName = classMappings.get(key);
+                                if (newName != null) {
+                                    fieldInsnNode.name = newName;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return transformedNodes;
+        } catch (Exception e) {
+            throw new ObfuscationException("Failed to transform fields: " + e.getMessage());
         }
     }
 
@@ -93,7 +93,7 @@ public class FieldTransformer extends AbstractTransformer {
                 newName.append(String.format("%02x", b));
             }
 
-            newName.setCharAt(0, (char) ('a' + random.nextInt(26)));
+            newName.setCharAt(0, ( char) ('a' + random.nextInt(26)));
 
             return newName.toString();
         } catch (NoSuchAlgorithmException e) {

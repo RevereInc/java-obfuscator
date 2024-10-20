@@ -1,10 +1,12 @@
 package dev.revere.obfuscator.transformer;
 
+import dev.revere.obfuscator.classloader.ClassLoaderProvider;
 import dev.revere.obfuscator.config.Configuration;
 import dev.revere.obfuscator.exception.ObfuscationException;
-import dev.revere.obfuscator.logging.Logger;
+import dev.revere.obfuscator.transformer.context.TransformerContext;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.tree.ClassNode;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -24,26 +26,18 @@ public abstract class AbstractTransformer implements Transformer {
         return name;
     }
 
-    @Override
-    public Map<String, byte[]> transformAllClasses(Map<String, byte[]> classes, Configuration config, TransformationContext context) throws ObfuscationException {
-        Map<String, byte[]> transformedClasses = new HashMap<>(classes);
-        Map<String, byte[]> newClasses = new HashMap<>();
+    public abstract Map<String, ClassNode> transform(Map<String, ClassNode> classNodes, Configuration config, TransformerContext context) throws ObfuscationException;
 
-        for (Map.Entry<String, byte[]> entry : new HashMap<>(classes).entrySet()) {
-            String className = entry.getKey().replace('/', '.').replace(".class", "");
-            byte[] classBytes = entry.getValue();
-            if (TransformerFilter.shouldTransform(className, getName(), config)) {
-                byte[] transformedBytes = doTransform(classBytes, className, config, context, transformedClasses, newClasses);
-                if (transformedBytes != null) {
-                    transformedClasses.put(entry.getKey(), transformedBytes);
-                }
-            }
-        }
-
-        transformedClasses.putAll(newClasses);
-        return transformedClasses;
+    protected boolean shouldTransform(String className, Configuration config) {
+        return TransformerFilter.shouldTransform(className, getName(), config);
     }
 
-    public void collectInformation(Map<String, byte[]> classes, Configuration config, TransformationContext context) throws ObfuscationException {}
-    protected abstract byte[] doTransform(byte[] classBytes, String className, Configuration config, TransformationContext context, Map<String, byte[]> allClasses, Map<String, byte[]> newClasses) throws ObfuscationException;
+    public ClassWriter getClassWriter(ClassLoaderProvider classLoaderProvider) {
+        return new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES) {
+            @Override
+            protected ClassLoader getClassLoader() {
+                return classLoaderProvider.getClassLoader();
+            }
+        };
+    }
 }
